@@ -20,6 +20,9 @@
  ***************************************************************************/
 
 // $Log$
+// Revision 1.66  2006/09/18 10:07:24  dkrajzew
+// removed deprecated c2c functions, added new made by Danilot Boyom
+//
 // Revision 1.64  2006/08/17 14:06:26  t-bohn
 // a little more statistics information during simulation run
 //
@@ -400,7 +403,7 @@ class MSTriggerControl;
 class ShapeContainer;
 class BinaryInputDevice;
 class MSRouteLoader;
-
+class MSBuildCells;
 
 /* =========================================================================
  * class definitions
@@ -434,6 +437,12 @@ public:
 		OS_CELL_TO_SS2,
         /// TrafficOnline-SS2 LA output
 		OS_LA_TO_SS2,
+		/// TrafficOnline-SS2-SQL output
+        OS_DEVICE_TO_SS2_SQL,
+        /// TrafficOnline-SS2-SQL Cell output
+		OS_CELL_TO_SS2_SQL,
+        /// TrafficOnline-SS2-SQL LA output
+		OS_LA_TO_SS2_SQL,
         /// maximum value
         OS_MAX
     };
@@ -481,6 +490,9 @@ public:
 
     /// performs a single simulation step
     void simulationStep( SUMOTime start, SUMOTime step);
+
+	/// compute the distance between equipped vehicle
+	void computeCar2Car(void);
 
     /** @brief Inserts a MSNet into the static dictionary
         Returns true if the key id isn't already in the dictionary.
@@ -606,7 +618,7 @@ public:
                 std::cout << " (" << mySimStepDuration << "ms ~= "
                     << (1000./ (SUMOReal) mySimStepDuration) << "*RT, ~"
                     << ((SUMOReal) myVehicleControl->getRunningVehicleNo()/(SUMOReal) mySimStepDuration*1000.)
-                        << "UPS, vehicles" 
+                        << "UPS, vehicles"
 						<< " TOT " << myVehicleControl->getEmittedVehicleNo()
 						<< " ACT " << myVehicleControl->getRunningVehicleNo()
                     << "       "
@@ -640,10 +652,13 @@ public:
     void setOffset(const Position2D &p);
     void setOrigBoundary(const Boundary &p);
     void setConvBoundary(const Boundary &p);
+    void setOrigProj(const std::string &proj);
+
 
     const Position2D &getOffset() const;
     const Boundary &getOrigBoundary() const;
     const Boundary &getConvBoundary() const;
+    const std::string &getOrigProj() const;
 
 	/////////////////////////////////////////////
 	MSPhoneNet * getMSPhoneNet() { return myMSPhoneNet; } ;
@@ -675,6 +690,9 @@ protected:
 
     /** route loader for dynamic loading of routes */
     MSRouteLoaderControl *myRouteLoaders;
+
+	// cells Builder
+	MSBuildCells *myCellsBuilder;
 
     /// Timestep [sec]
     static SUMOReal myDeltaT;
@@ -720,6 +738,7 @@ protected:
 
     Position2D myOffset;
     Boundary myOrigBoundary, myConvBoundary;
+    std::string myOrigProj;
 
 private:
     /// Copy constructor.

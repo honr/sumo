@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 
 import javax.xml.stream.XMLInputFactory;
@@ -36,12 +37,14 @@ public class TraceReader {
 	 */
 	public static void read(PrintWriter out, String trace,
 			List<Vehicle> vehicles, HashMap<String, Integer> vehicleIds,
-			List<Edge> edges, List<Vehicle> equippedVehicles, double penetration) {
+			HashMap<String, Integer> partialVehicleIds, List<Edge> edges,
+			List<Vehicle> equippedVehicles, double penetration) {
 		try {
 			InputStream in = new FileInputStream(trace);
 			XMLInputFactory factory = XMLInputFactory.newInstance();
 			XMLStreamReader parser = factory.createXMLStreamReader(in);
 			String edgeid = "";
+			String laneid = "";
 			float time = -1;
 			// parse trace file
 			for (int event = parser.next(); event != XMLStreamConstants.END_DOCUMENT; event = parser
@@ -58,86 +61,111 @@ public class TraceReader {
 							}
 						}
 					}
-					// process only positive time
-					if (time > 0) {
-						// edge element found
-						if (parser.getLocalName().equals("edge")) {
-							for (int attr = 0; attr < parser
-									.getAttributeCount(); attr++) {
-								String attrName = parser
-										.getAttributeLocalName(attr);
-								String value = parser.getAttributeValue(attr);
-								if ("id".equals(attrName)) {
-									edgeid = value;
-								}
+					// edge element found
+					if (parser.getLocalName().equals("edge")) {
+						for (int attr = 0; attr < parser
+								.getAttributeCount(); attr++) {
+							String attrName = parser
+									.getAttributeLocalName(attr);
+							String value = parser.getAttributeValue(attr);
+							if ("id".equals(attrName)) {
+								edgeid = value;
 							}
 						}
-						// vehicle element found
-						if (parser.getLocalName().equals("vehicle")) {
-							String id = "";
-							float pos = 0;
-							float x = 0;
-							float y = 0;
-							float v = 0;
-							for (int attr = 0; attr < parser
-									.getAttributeCount(); attr++) {
-								String attrName = parser
-										.getAttributeLocalName(attr);
-								String value = parser.getAttributeValue(attr);
-								if ("id".equals(attrName)) {
-									id = value;
-								}
-								if ("pos".equals(attrName)) {
-									pos = Float.parseFloat(value);
-								}
-								if ("speed".equals(attrName)) {
-									v = Float.parseFloat(value);
-								}
+					}
+					// lane element found
+					if (parser.getLocalName().equals("lane")) {
+						for (int attr = 0; attr < parser
+								.getAttributeCount(); attr++) {
+							String attrName = parser
+									.getAttributeLocalName(attr);
+							String value = parser.getAttributeValue(attr);
+							if ("id".equals(attrName)) {
+								laneid = value;
 							}
-
-							Edge thisedge = null;
-							// find corresponding edge object
-							for (Edge edge : edges) {
-								thisedge = edge;
-								if (edge.id.equals(edgeid)) {
-									break;
-								}
+						}
+					}
+					// vehicle element found
+					if (parser.getLocalName().equals("vehicle")) {
+						String id = "";
+						float pos = 0;
+						float x = 0;
+						float y = 0;
+						float v = 0;
+						for (int attr = 0; attr < parser
+								.getAttributeCount(); attr++) {
+							String attrName = parser
+									.getAttributeLocalName(attr);
+							String value = parser.getAttributeValue(attr);
+							if ("id".equals(attrName)) {
+								id = value;
 							}
-
-							// calculate positons of vehicle
-							x = thisedge.xfrom + pos
-									* (thisedge.xto - thisedge.xfrom)
-									/ thisedge.length;
-							y = thisedge.yfrom + pos
-									* (thisedge.yto - thisedge.yfrom)
-									/ thisedge.length;
-
-							// new vehicles found
-							if (!vehicleIds.containsKey(id)) {
-								// create Vehicle object
-								Vehicle vehicle = new Vehicle(id, x, y, time);
-								// and save it
-								vehicles.add(vehicle);
-								// give it new id and save it too
-								vehicleIds.put(id, vehicleIds.size());
-								// apply pentration factor
-								assert (penetration >= 0 && penetration <= 1);
-								if (Math.random() <= penetration) {
-									equippedVehicles.add(vehicle);
-								}
+							if ("pos".equals(attrName)) {
+								pos = Float.parseFloat(value);
 							}
+							if ("speed".equals(attrName)) {
+								v = Float.parseFloat(value);
+							}
+						}
 
-							if (equippedVehicles.contains(vehicles
-									.get(vehicleIds.get(id)))) {
+						Edge thisedge = null;
+						// find corresponding edge object
+						for (Edge edge : edges) {
+							thisedge = edge;
+							if (edge.id.equals(edgeid)) {
+								break;
+							}
+						}
+						
+						// get lane of edge
+						Lane thislane = thisedge.lanes.get(laneid);
+						
+						// calculate positons of vehicle
+						x = thislane.xfrom + pos
+								* (thislane.xto - thislane.xfrom)
+								/ thisedge.length;
+						y = thislane.yfrom + pos
+								* (thislane.yto - thislane.yfrom)
+								/ thisedge.length;
+						Vehicle vehicle = null;
+						// new vehicle found
+						// * create new vehicles object
+						// * creation time := 0    if time <  0
+						//                    time if time >= 0
+						if (!vehicleIds.containsKey(id)) {
+							// create Vehicle object
+							float _time = (time>=0) ? time : 0; // (!) time >= 0
+							vehicle = new Vehicle(id, x, y, _time, v);
+							// and save it
+							vehicles.add(vehicle);
+							// give it new id and save it too
+							vehicleIds.put(id, vehicleIds.size());
+							// apply pentration factor
+							assert (penetration >= 0 && penetration <= 1);
+							if (Math.random() <= penetration) {
+								equippedVehicles.add(vehicle);
+							}
+						} else {
+							vehicle = vehicles.get(vehicleIds.get(id));
+							vehicle.setX(x, time);
+							vehicle.setY(y, time);
+							vehicle.setSpeed(v);
+						}
+
+						// write vehicle movement if time >= 0
+						if (time >= 0) {
+							if (equippedVehicles.contains(vehicles.get(vehicleIds.get(id)))) {
+								if (!partialVehicleIds.containsKey(id)) {
+									partialVehicleIds.put(id, partialVehicleIds.size());
+								}
 								// write to mobility file
-								out.println("$ns_ at " + time + " \"$node_("
-										+ vehicleIds.get(id) + ") setdest " + x
-										+ " " + y + " " + v + "\"");
+								out.println("$ns_ at " + time + 
+										" \"$node_(" + partialVehicleIds.get(id) + ") "
+										+ "setdest " + vehicle.getX() + " " + vehicle.getY() + " " + vehicle.getSpeed() + "\"");
 							}
-							// save some data for activity file (last occurence
-							// of vehicle)
-							vehicles.get(vehicleIds.get(id)).time_last = time;
 						}
+						// save some data for activity file (last occurence of vehicle)
+						vehicles.get(vehicleIds.get(id)).setTime(time);
 					}
 				}
 			}
@@ -146,6 +174,15 @@ public class TraceReader {
 			System.out.println(ex);
 		} catch (IOException ex) {
 			System.out.println("IOException while parsing " + trace);
+		}
+		// remove vehicles existing only at time<=0
+		Iterator<Vehicle> iter = vehicles.iterator();
+		while (iter.hasNext()) {
+			Vehicle vehicle = iter.next();
+			if (vehicle.getStopTime() <= vehicle.getStartTime()) {
+				equippedVehicles.remove(vehicle);
+				iter.remove();
+			}
 		}
 	}
 }
